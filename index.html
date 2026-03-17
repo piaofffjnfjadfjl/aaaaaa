@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Asphalt風レースゲーム</title>
+<style>
+body { margin:0; overflow:hidden; background:black; color:white; font-family:sans-serif;}
+#ui { position:absolute; top:10px; left:10px; z-index:10;}
+canvas { display:block; }
+</style>
+</head>
+<body>
+
+<div id="ui">
+Speed: <span id="speed">0</span><br>
+Nitro: <span id="nitro">100</span>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = innerWidth;
+canvas.height = innerHeight;
+
+let keys = {};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+let speed = 0;
+let maxSpeed = 20;
+let nitro = 100;
+let playerX = 0;
+let position = 0;
+
+let roadWidth = 2000;
+let segments = [];
+let cars = [];
+
+// 道生成
+for (let i = 0; i < 500; i++) {
+  segments.push({
+    curve: Math.sin(i * 0.05) * 2
+  });
+}
+
+// NPC車
+for (let i = 0; i < 10; i++) {
+  cars.push({
+    z: Math.random() * 50000,
+    x: (Math.random() - 0.5) * 2
+  });
+}
+
+function update() {
+  // ニトロ
+  let boosting = keys["Shift"] && nitro > 0;
+  let currentMax = boosting ? 35 : maxSpeed;
+
+  if (boosting) nitro -= 0.5;
+  else nitro += 0.2;
+
+  nitro = Math.max(0, Math.min(100, nitro));
+
+  // 加速
+  if (keys["ArrowUp"]) speed += 0.3;
+  else speed -= 0.2;
+
+  if (keys["ArrowDown"]) speed -= 0.5;
+
+  speed = Math.max(0, Math.min(speed, currentMax));
+
+  // ドリフトっぽい挙動
+  if (keys["ArrowLeft"]) playerX -= 0.06 * speed;
+  if (keys["ArrowRight"]) playerX += 0.06 * speed;
+
+  playerX *= 0.98;
+
+  position += speed;
+
+  // NPC移動＆衝突
+  cars.forEach(car => {
+    car.z -= speed * 5;
+    if (car.z < 0) {
+      car.z = 50000;
+      car.x = (Math.random() - 0.5) * 2;
+    }
+
+    // 衝突判定
+    if (Math.abs(car.z - 1000) < 500) {
+      if (Math.abs(car.x - playerX) < 0.2) {
+        speed *= 0.5;
+      }
+    }
+  });
+
+  document.getElementById("speed").innerText = Math.floor(speed * 10);
+  document.getElementById("nitro").innerText = Math.floor(nitro);
+}
+
+function drawSegment(x1, y1, w1, x2, y2, w2, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x1 - w1, y1);
+  ctx.lineTo(x1 + w1, y1);
+  ctx.lineTo(x2 + w2, y2);
+  ctx.lineTo(x2 - w2, y2);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function render() {
+  // 夜背景
+  ctx.fillStyle = "#0a0a1a";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // ネオン風背景
+  for (let i = 0; i < 50; i++) {
+    ctx.fillStyle = "rgba(0,255,255,0.3)";
+    ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 2, 10);
+  }
+
+  let base = Math.floor(position / 200) % segments.length;
+  let x = 0;
+  let dx = 0;
+
+  for (let n = 0; n < 100; n++) {
+    let seg = segments[(base + n) % segments.length];
+
+    let scale1 = 1 / (n + 1);
+    let scale2 = 1 / (n + 2);
+
+    let y1 = canvas.height * (1 - scale1);
+    let y2 = canvas.height * (1 - scale2);
+
+    let w1 = roadWidth * scale1;
+    let w2 = roadWidth * scale2;
+
+    x += dx;
+    dx += seg.curve * 0.001;
+
+    let c1 = canvas.width/2 + (x - playerX * 1000) * scale1;
+    let c2 = canvas.width/2 + (x - playerX * 1000) * scale2;
+
+    drawSegment(c1, y1, w1, c2, y2, w2, n%2?"#222":"#333");
+    drawSegment(c1, y1, w1*0.05, c2, y2, w2*0.05, "#0ff");
+  }
+
+  // NPC描画
+  cars.forEach(car => {
+    let dz = car.z - position;
+    if (dz > 0 && dz < 5000) {
+      let scale = 1 / (dz * 0.001);
+      let x = canvas.width/2 + (car.x - playerX) * 500 * scale;
+      let y = canvas.height * (1 - scale);
+
+      ctx.fillStyle = "yellow";
+      ctx.fillRect(x, y, 30*scale, 50*scale);
+    }
+  });
+
+  // プレイヤー車
+  ctx.fillStyle = "red";
+  ctx.fillRect(canvas.width/2 - 25 + playerX*300, canvas.height-100, 50, 80);
+
+  // ニトロエフェクト
+  if (keys["Shift"] && nitro > 0) {
+    ctx.fillStyle = "rgba(0,255,255,0.5)";
+    ctx.fillRect(canvas.width/2 - 20 + playerX*300, canvas.height-20, 40, 20);
+  }
+}
+
+function loop(){
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+
+</body>
+</html>
