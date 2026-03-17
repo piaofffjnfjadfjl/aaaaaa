@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Asphalt風レースゲーム</title>
+<title>Asphalt風 強化版</title>
 <style>
 body { margin:0; overflow:hidden; background:black; color:white; font-family:sans-serif;}
 #ui { position:absolute; top:10px; left:10px; z-index:10;}
@@ -29,68 +29,77 @@ document.addEventListener("keydown", e => keys[e.key] = true);
 document.addEventListener("keyup", e => keys[e.key] = false);
 
 let speed = 0;
-let maxSpeed = 20;
+let baseMaxSpeed = 22;
 let nitro = 100;
 let playerX = 0;
 let position = 0;
+let drift = false;
 
 let roadWidth = 2000;
 let segments = [];
 let cars = [];
 
-// 道生成
-for (let i = 0; i < 500; i++) {
+// 道生成（より強いカーブ）
+for (let i = 0; i < 800; i++) {
   segments.push({
-    curve: Math.sin(i * 0.05) * 2
+    curve: Math.sin(i * 0.04) * 3
   });
 }
 
-// NPC車
-for (let i = 0; i < 10; i++) {
+// 敵車
+for (let i = 0; i < 20; i++) {
   cars.push({
-    z: Math.random() * 50000,
-    x: (Math.random() - 0.5) * 2
+    z: Math.random() * 80000,
+    x: (Math.random() - 0.5) * 2,
+    speed: 5 + Math.random()*5
   });
 }
 
 function update() {
-  // ニトロ
-  let boosting = keys["Shift"] && nitro > 0;
-  let currentMax = boosting ? 35 : maxSpeed;
 
-  if (boosting) nitro -= 0.5;
-  else nitro += 0.2;
+  drift = keys[" "] || keys["Shift"];
+
+  // ニトロ状態
+  let boost = keys["Shift"] && nitro > 0;
+  let maxSpeed = boost ? 40 : baseMaxSpeed;
+
+  if (boost) nitro -= 0.6;
+  if (drift) nitro += 0.3;
 
   nitro = Math.max(0, Math.min(100, nitro));
 
   // 加速
-  if (keys["ArrowUp"]) speed += 0.3;
-  else speed -= 0.2;
+  if (keys["ArrowUp"]) speed += 0.4;
+  else speed -= 0.25;
 
-  if (keys["ArrowDown"]) speed -= 0.5;
+  if (keys["ArrowDown"]) speed -= 0.6;
 
-  speed = Math.max(0, Math.min(speed, currentMax));
+  speed = Math.max(0, Math.min(speed, maxSpeed));
 
-  // ドリフトっぽい挙動
-  if (keys["ArrowLeft"]) playerX -= 0.06 * speed;
-  if (keys["ArrowRight"]) playerX += 0.06 * speed;
+  // 操作（ドリフト時は滑る）
+  let grip = drift ? 0.03 : 0.06;
 
-  playerX *= 0.98;
+  if (keys["ArrowLeft"]) playerX -= grip * speed;
+  if (keys["ArrowRight"]) playerX += grip * speed;
+
+  playerX *= drift ? 0.995 : 0.9;
 
   position += speed;
 
-  // NPC移動＆衝突
+  // 敵車
   cars.forEach(car => {
-    car.z -= speed * 5;
+    car.z -= speed * 4 - car.speed;
+
     if (car.z < 0) {
-      car.z = 50000;
+      car.z = 80000;
       car.x = (Math.random() - 0.5) * 2;
     }
 
-    // 衝突判定
-    if (Math.abs(car.z - 1000) < 500) {
-      if (Math.abs(car.x - playerX) < 0.2) {
-        speed *= 0.5;
+    // 衝突
+    if (Math.abs(car.z - 1500) < 400) {
+      if (Math.abs(car.x - playerX) < 0.25) {
+        speed *= 0.4;
+        nitro -= 10;
       }
     }
   });
@@ -99,75 +108,90 @@ function update() {
   document.getElementById("nitro").innerText = Math.floor(nitro);
 }
 
-function drawSegment(x1, y1, w1, x2, y2, w2, color) {
-  ctx.fillStyle = color;
+function drawSegment(x1,y1,w1,x2,y2,w2,color){
+  ctx.fillStyle=color;
   ctx.beginPath();
-  ctx.moveTo(x1 - w1, y1);
-  ctx.lineTo(x1 + w1, y1);
-  ctx.lineTo(x2 + w2, y2);
-  ctx.lineTo(x2 - w2, y2);
+  ctx.moveTo(x1-w1,y1);
+  ctx.lineTo(x1+w1,y1);
+  ctx.lineTo(x2+w2,y2);
+  ctx.lineTo(x2-w2,y2);
   ctx.closePath();
   ctx.fill();
 }
 
-function render() {
-  // 夜背景
-  ctx.fillStyle = "#0a0a1a";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+function render(){
 
-  // ネオン風背景
-  for (let i = 0; i < 50; i++) {
-    ctx.fillStyle = "rgba(0,255,255,0.3)";
-    ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 2, 10);
-  }
+  // 背景（グラデーション風）
+  let grd = ctx.createLinearGradient(0,0,0,canvas.height);
+  grd.addColorStop(0,"#050510");
+  grd.addColorStop(1,"#0a0a1f");
+  ctx.fillStyle = grd;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
   let base = Math.floor(position / 200) % segments.length;
-  let x = 0;
-  let dx = 0;
 
-  for (let n = 0; n < 100; n++) {
-    let seg = segments[(base + n) % segments.length];
+  let x=0, dx=0;
 
-    let scale1 = 1 / (n + 1);
-    let scale2 = 1 / (n + 2);
+  for(let n=0;n<120;n++){
+    let seg = segments[(base+n)%segments.length];
 
-    let y1 = canvas.height * (1 - scale1);
-    let y2 = canvas.height * (1 - scale2);
+    let scale1 = 1/(n+1);
+    let scale2 = 1/(n+2);
 
-    let w1 = roadWidth * scale1;
-    let w2 = roadWidth * scale2;
+    // スピードで遠近強化
+    let perspective = 1 + speed * 0.02;
+
+    let y1 = canvas.height*(1-scale1*perspective);
+    let y2 = canvas.height*(1-scale2*perspective);
+
+    let w1 = roadWidth*scale1;
+    let w2 = roadWidth*scale2;
 
     x += dx;
-    dx += seg.curve * 0.001;
+    dx += seg.curve*0.001;
 
-    let c1 = canvas.width/2 + (x - playerX * 1000) * scale1;
-    let c2 = canvas.width/2 + (x - playerX * 1000) * scale2;
+    let c1 = canvas.width/2 + (x - playerX*1000)*scale1;
+    let c2 = canvas.width/2 + (x - playerX*1000)*scale2;
 
-    drawSegment(c1, y1, w1, c2, y2, w2, n%2?"#222":"#333");
-    drawSegment(c1, y1, w1*0.05, c2, y2, w2*0.05, "#0ff");
+    // 道
+    drawSegment(c1,y1,w1,c2,y2,w2,n%2?"#2a2a2a":"#333");
+
+    // サイドライン
+    drawSegment(c1,y1,w1*1.2,c2,y2,w2*1.2,n%2?"#f00":"#fff");
+
+    // 中央ライン
+    drawSegment(c1,y1,w1*0.03,c2,y2,w2*0.03,"#0ff");
   }
 
-  // NPC描画
-  cars.forEach(car => {
+  // 敵車
+  cars.forEach(car=>{
     let dz = car.z - position;
-    if (dz > 0 && dz < 5000) {
-      let scale = 1 / (dz * 0.001);
-      let x = canvas.width/2 + (car.x - playerX) * 500 * scale;
-      let y = canvas.height * (1 - scale);
+    if(dz>0 && dz<6000){
+      let scale = 1/(dz*0.001);
+      let x = canvas.width/2 + (car.x-playerX)*600*scale;
+      let y = canvas.height*(1-scale);
 
-      ctx.fillStyle = "yellow";
-      ctx.fillRect(x, y, 30*scale, 50*scale);
+      ctx.fillStyle="yellow";
+      ctx.fillRect(x,y,40*scale,70*scale);
     }
   });
 
-  // プレイヤー車
-  ctx.fillStyle = "red";
-  ctx.fillRect(canvas.width/2 - 25 + playerX*300, canvas.height-100, 50, 80);
+  // 車の傾き
+  let tilt = playerX * 200;
 
-  // ニトロエフェクト
-  if (keys["Shift"] && nitro > 0) {
-    ctx.fillStyle = "rgba(0,255,255,0.5)";
-    ctx.fillRect(canvas.width/2 - 20 + playerX*300, canvas.height-20, 40, 20);
+  ctx.save();
+  ctx.translate(canvas.width/2 + playerX*300, canvas.height-100);
+  ctx.rotate(tilt * 0.001);
+
+  ctx.fillStyle="red";
+  ctx.fillRect(-25,0,50,80);
+
+  ctx.restore();
+
+  // ニトロ演出
+  if(keys["Shift"] && nitro>0){
+    ctx.fillStyle="rgba(0,255,255,0.6)";
+    ctx.fillRect(canvas.width/2-20+playerX*300, canvas.height-20, 40, 20);
   }
 }
 
