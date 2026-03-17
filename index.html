@@ -2,206 +2,121 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Asphalt風 強化版</title>
+<title>モグラたたきゲーム</title>
 <style>
-body { margin:0; overflow:hidden; background:black; color:white; font-family:sans-serif;}
-#ui { position:absolute; top:10px; left:10px; z-index:10;}
-canvas { display:block; }
+body {
+  text-align: center;
+  font-family: sans-serif;
+  background: #87ceeb;
+}
+
+h1 { margin-top: 10px; }
+
+#game {
+  display: grid;
+  grid-template-columns: repeat(3, 120px);
+  gap: 20px;
+  justify-content: center;
+  margin-top: 30px;
+}
+
+.hole {
+  width: 120px;
+  height: 120px;
+  background: #654321;
+  border-radius: 50%;
+  position: relative;
+  overflow: hidden;
+}
+
+.mole {
+  width: 80px;
+  height: 80px;
+  background: brown;
+  border-radius: 50%;
+  position: absolute;
+  bottom: -80px;
+  left: 20px;
+  transition: 0.2s;
+  cursor: pointer;
+}
+
+.up {
+  bottom: 20px;
+}
+
+#info {
+  margin-top: 20px;
+  font-size: 20px;
+}
 </style>
 </head>
 <body>
 
-<div id="ui">
-Speed: <span id="speed">0</span><br>
-Nitro: <span id="nitro">100</span>
+<h1>🐹 モグラたたきゲーム</h1>
+
+<div id="info">
+スコア: <span id="score">0</span> |
+残り時間: <span id="time">30</span>
 </div>
 
-<canvas id="game"></canvas>
+<div id="game"></div>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-canvas.width = innerWidth;
-canvas.height = innerHeight;
+const game = document.getElementById("game");
+const scoreEl = document.getElementById("score");
+const timeEl = document.getElementById("time");
 
-let keys = {};
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
+let score = 0;
+let time = 30;
+let holes = [];
+let currentMole = null;
 
-let speed = 0;
-let baseMaxSpeed = 22;
-let nitro = 100;
-let playerX = 0;
-let position = 0;
-let drift = false;
+// 穴を作る
+for (let i = 0; i < 9; i++) {
+  let hole = document.createElement("div");
+  hole.className = "hole";
 
-let roadWidth = 2000;
-let segments = [];
-let cars = [];
+  let mole = document.createElement("div");
+  mole.className = "mole";
 
-// 道生成（より強いカーブ）
-for (let i = 0; i < 800; i++) {
-  segments.push({
-    curve: Math.sin(i * 0.04) * 3
-  });
-}
-
-// 敵車
-for (let i = 0; i < 20; i++) {
-  cars.push({
-    z: Math.random() * 80000,
-    x: (Math.random() - 0.5) * 2,
-    speed: 5 + Math.random()*5
-  });
-}
-
-function update() {
-
-  drift = keys[" "] || keys["Shift"];
-
-  // ニトロ状態
-  let boost = keys["Shift"] && nitro > 0;
-  let maxSpeed = boost ? 40 : baseMaxSpeed;
-
-  if (boost) nitro -= 0.6;
-  if (drift) nitro += 0.3;
-
-  nitro = Math.max(0, Math.min(100, nitro));
-
-  // 加速
-  if (keys["ArrowUp"]) speed += 0.4;
-  else speed -= 0.25;
-
-  if (keys["ArrowDown"]) speed -= 0.6;
-
-  speed = Math.max(0, Math.min(speed, maxSpeed));
-
-  // 操作（ドリフト時は滑る）
-  let grip = drift ? 0.03 : 0.06;
-
-  if (keys["ArrowLeft"]) playerX -= grip * speed;
-  if (keys["ArrowRight"]) playerX += grip * speed;
-
-  playerX *= drift ? 0.995 : 0.9;
-
-  position += speed;
-
-  // 敵車
-  cars.forEach(car => {
-    car.z -= speed * 4 - car.speed;
-
-    if (car.z < 0) {
-      car.z = 80000;
-      car.x = (Math.random() - 0.5) * 2;
+  mole.onclick = () => {
+    if (mole === currentMole) {
+      score++;
+      scoreEl.textContent = score;
+      mole.classList.remove("up");
+      currentMole = null;
     }
+  };
 
-    // 衝突
-    if (Math.abs(car.z - 1500) < 400) {
-      if (Math.abs(car.x - playerX) < 0.25) {
-        speed *= 0.4;
-        nitro -= 10;
-      }
-    }
-  });
-
-  document.getElementById("speed").innerText = Math.floor(speed * 10);
-  document.getElementById("nitro").innerText = Math.floor(nitro);
+  hole.appendChild(mole);
+  game.appendChild(hole);
+  holes.push(mole);
 }
 
-function drawSegment(x1,y1,w1,x2,y2,w2,color){
-  ctx.fillStyle=color;
-  ctx.beginPath();
-  ctx.moveTo(x1-w1,y1);
-  ctx.lineTo(x1+w1,y1);
-  ctx.lineTo(x2+w2,y2);
-  ctx.lineTo(x2-w2,y2);
-  ctx.closePath();
-  ctx.fill();
+// モグラ出現
+function showMole() {
+  if (currentMole) currentMole.classList.remove("up");
+
+  let index = Math.floor(Math.random() * holes.length);
+  currentMole = holes[index];
+  currentMole.classList.add("up");
 }
 
-function render(){
-
-  // 背景（グラデーション風）
-  let grd = ctx.createLinearGradient(0,0,0,canvas.height);
-  grd.addColorStop(0,"#050510");
-  grd.addColorStop(1,"#0a0a1f");
-  ctx.fillStyle = grd;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  let base = Math.floor(position / 200) % segments.length;
-
-  let x=0, dx=0;
-
-  for(let n=0;n<120;n++){
-    let seg = segments[(base+n)%segments.length];
-
-    let scale1 = 1/(n+1);
-    let scale2 = 1/(n+2);
-
-    // スピードで遠近強化
-    let perspective = 1 + speed * 0.02;
-
-    let y1 = canvas.height*(1-scale1*perspective);
-    let y2 = canvas.height*(1-scale2*perspective);
-
-    let w1 = roadWidth*scale1;
-    let w2 = roadWidth*scale2;
-
-    x += dx;
-    dx += seg.curve*0.001;
-
-    let c1 = canvas.width/2 + (x - playerX*1000)*scale1;
-    let c2 = canvas.width/2 + (x - playerX*1000)*scale2;
-
-    // 道
-    drawSegment(c1,y1,w1,c2,y2,w2,n%2?"#2a2a2a":"#333");
-
-    // サイドライン
-    drawSegment(c1,y1,w1*1.2,c2,y2,w2*1.2,n%2?"#f00":"#fff");
-
-    // 中央ライン
-    drawSegment(c1,y1,w1*0.03,c2,y2,w2*0.03,"#0ff");
+// タイマー
+let gameInterval = setInterval(() => {
+  if (time <= 0) {
+    clearInterval(gameInterval);
+    alert("終了！スコア: " + score);
+    return;
   }
 
-  // 敵車
-  cars.forEach(car=>{
-    let dz = car.z - position;
-    if(dz>0 && dz<6000){
-      let scale = 1/(dz*0.001);
-      let x = canvas.width/2 + (car.x-playerX)*600*scale;
-      let y = canvas.height*(1-scale);
+  time--;
+  timeEl.textContent = time;
 
-      ctx.fillStyle="yellow";
-      ctx.fillRect(x,y,40*scale,70*scale);
-    }
-  });
+  showMole();
+}, 700);
 
-  // 車の傾き
-  let tilt = playerX * 200;
-
-  ctx.save();
-  ctx.translate(canvas.width/2 + playerX*300, canvas.height-100);
-  ctx.rotate(tilt * 0.001);
-
-  ctx.fillStyle="red";
-  ctx.fillRect(-25,0,50,80);
-
-  ctx.restore();
-
-  // ニトロ演出
-  if(keys["Shift"] && nitro>0){
-    ctx.fillStyle="rgba(0,255,255,0.6)";
-    ctx.fillRect(canvas.width/2-20+playerX*300, canvas.height-20, 40, 20);
-  }
-}
-
-function loop(){
-  update();
-  render();
-  requestAnimationFrame(loop);
-}
-
-loop();
 </script>
 
 </body>
